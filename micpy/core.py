@@ -1,36 +1,37 @@
-from pathlib import Path
+import os.path
 from os.path import join
-
-from skimage import io
-from skimage import exposure
-from skimage import morphology
-from patchify import patchify
-import numpy as np
-from matplotlib import pyplot as plt
+from pathlib import Path
 
 import cv2
+import numpy as np
 from PIL import Image
+from matplotlib import pyplot as plt
+import matplotlib.ticker as plticker
+from patchify import patchify
+from skimage import exposure
+from skimage import io
+from skimage import morphology
 from tqdm import tqdm
 
 
 def read(img_path, gray_scale=True):
     img = cv2.imread(img_path, 0)
     return img
-    
+
 
 def left_right_hist_equalization(img, kernel=3, min_threshold=10, max_threshold=255):
     """ left to right histogram equalization for a single image based on average intensity in the n left column and right columns"""
     img_adjusted = img.copy()
-    left_arr = img[:,:kernel]
+    left_arr = img[:, :kernel]
     right_arr = img[:, -kernel:]
     left_avg = np.average(left_arr)
     right_avg = np.average(right_arr)
-    avg = (left_avg  + right_avg / 2)
+    avg = (left_avg + right_avg / 2)
     for c in range(img.shape[1]):
         col = img[:, c]
         col_filtered = col[(col >= min_threshold) & (col <= max_threshold)]
         col_avg = np.average(col_filtered)
-        if  col_avg < avg:
+        if col_avg < avg:
             col = col + np.abs(col_avg - avg)
         else:
             col = col - np.abs(col_avg - avg)
@@ -46,7 +47,7 @@ def set_average_intensity_single(img, avg_intensity, min_threshold=10, max_thres
         col = img[:, c]
         col_filtered = col[(col >= min_threshold) & (col <= max_threshold)]
         col_avg = np.average(col_filtered)
-        if  col_avg < avg_intensity:
+        if col_avg < avg_intensity:
             col = col + np.abs(col_avg - avg_intensity)
         else:
             col = col - np.abs(col_avg - avg_intensity)
@@ -117,8 +118,8 @@ def clahe(img):
         mask = np.zeros(threshold.shape, np.uint8)
         cv2.drawContours(mask, contours, -1, (255, 0, 0), 3)
         return mask, contours
-    
-    
+
+
 def detect_contour_filtered(image_arr, eccentricity_min, eccentricity_max, area_min, area_max):
     """
     Calculates the contours based on the thresholded image.
@@ -151,8 +152,9 @@ def detect_contour_filtered(image_arr, eccentricity_min, eccentricity_max, area_
 
 
 def remove_noise(img, min_size=3, connectivity=2):
-    binarized = np.where(img>0.1, 1, 0)
-    processed = morphology.remove_small_objects(binarized.astype(bool), min_size=min_size, connectivity=connectivity).astype(int)
+    binarized = np.where(img > 0.1, 1, 0)
+    processed = morphology.remove_small_objects(binarized.astype(bool), min_size=min_size,
+                                                connectivity=connectivity).astype(int)
     # black out pixels
     mask_x, mask_y = np.where(processed == 0)
     img[mask_x, mask_y] = 0
@@ -200,12 +202,13 @@ def detect_contour(thresholded_arr, eccentricity_min, eccentricity_max, contour_
             area = np.pi * a * b
 
             if (eccentricity <= eccentricity_max) and (eccentricity >= eccentricity_min):
-                if (len(c)>contour_length_min) and len(c) < contour_length_max:
+                if (len(c) > contour_length_min) and len(c) < contour_length_max:
                     filtered_contours.append(c)
 
     mask = np.zeros(thresholded_arr.shape, np.uint8)
     cv2.drawContours(mask, filtered_contours, -1, (255, 0, 0), 3)
     return mask, filtered_contours
+
 
 def split(img_path, output_dir_path):
     img = cv2.imread(img_path, 0)
@@ -220,7 +223,6 @@ def split(img_path, output_dir_path):
             img_tile = splitted_imges[i, j]
             cv2.imwrite(str(subdir / f"{i}_{j}_{name}"), img_tile)
 
-    
 
 def combine(columns, space, images, output_image_path):
     """ Combines (pathches) multiple image to form a single image
@@ -240,18 +242,63 @@ def combine(columns, space, images, output_image_path):
         rows += 1
     width_max = max([Image.open(image).width for image in images])
     height_max = max([Image.open(image).height for image in images])
-    background_width = width_max*columns + (space*columns)-space
-    background_height = height_max*rows + (space*rows)-space
+    background_width = width_max * columns + (space * columns) - space
+    background_height = height_max * rows + (space * rows) - space
     background = Image.new('RGBA', (background_width, background_height), (255, 255, 255, 255))
     x = 0
     y = 0
     for i, image in enumerate(tqdm(images)):
         img = Image.open(image)
-        x_offset = int((width_max-img.width)/2)
-        y_offset = int((height_max-img.height)/2)
-        background.paste(img, (x+x_offset, y+y_offset))
+        x_offset = int((width_max - img.width) / 2)
+        y_offset = int((height_max - img.height) / 2)
+        background.paste(img, (x + x_offset, y + y_offset))
         x += width_max + space
-        if (i+1) % columns == 0:
+        if (i + 1) % columns == 0:
             y += height_max + space
             x = 0
     background.save(output_image_path)
+
+
+def grid_layover(image_path, output_dir):
+    if type(image_path) == str:
+        image_path = Path(image_path)
+    # Open image file
+    name = image_path.name
+    image = Image.open(str(image_path))
+    my_dpi = 300.
+
+    # Set up figure
+    fig = plt.figure(figsize=(float(image.size[0]) / my_dpi, float(image.size[1]) / my_dpi), dpi=my_dpi)
+    ax = fig.add_subplot(111)
+
+    # Remove whitespace from around the image
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+
+    # Set the gridding interval: here we use the major tick interval
+    myInterval = 320.
+    loc = plticker.MultipleLocator(base=myInterval)
+    ax.xaxis.set_major_locator(loc)
+    ax.yaxis.set_major_locator(loc)
+
+    # Add the grid
+    ax.grid(which='major', axis='both', linestyle='-')
+
+    # Add the image
+    ax.imshow(image)
+
+    # Find number of gridsquares in x and y direction
+    # nx = abs(int(float(ax.get_xlim()[1] - ax.get_xlim()[0]) / float(myInterval)))
+    # ny = abs(int(float(ax.get_ylim()[1] - ax.get_ylim()[0]) / float(myInterval)))
+    nx = 8
+    ny = 6
+
+    # Add some labels to the gridsquares
+    for j in range(ny):
+        y = myInterval / 2 + j * myInterval
+        for i in range(nx):
+            x = myInterval / 2. + float(i) * myInterval
+            # ax.text(x, y, '{:d}'.format(i + j * nx), color='w', ha='center', va='center')
+            ax.text(x, y, f"{j}_{i}", color='r', ha='center', va='center')
+
+    # Save the figure
+    fig.savefig(os.path.join(output_dir, name), dpi=my_dpi)
