@@ -1,10 +1,7 @@
 import core
 
 import parameters
-import numpy as np
-import os
 import platypus
-from matplotlib import pyplot as plt
 
 
 def sample_sem():

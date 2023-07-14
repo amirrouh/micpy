@@ -6,7 +6,6 @@ import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 from scipy.optimize import curve_fit
-from scipy.signal import _savitzky_golay
 import parameters
 from statistics import stdev
 
